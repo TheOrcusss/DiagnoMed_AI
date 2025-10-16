@@ -42,7 +42,7 @@ export default function PatientProfile() {
               <span className="font-medium">Phone:</span> +91 98765 43210
             </p>
             <p>
-              <span className="font-medium">Date of Birth:</span> 10 June 1995
+              <span className="font-medium">Age:</span> 30 years
             </p>
             <p>
               <span className="font-medium">Blood Group:</span> B+

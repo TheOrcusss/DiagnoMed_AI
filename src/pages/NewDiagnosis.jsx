@@ -48,7 +48,7 @@ export default function NewDiagnosis() {
   };
 
   return (
-    <div className="min-w-screen mx-auto p-6 bg-gray-50 min-h-screen">
+    <div className="min-w-full mx-auto p-6 bg-gray-50 min-h-screen">
       <h1 className="flex items-center gap-3 text-3xl font-bold text-blue-600 mb-6">
         <FileText className="w-7 h-7" />
         Patient Diagnoses
@@ -70,14 +70,14 @@ export default function NewDiagnosis() {
         </p>
       ) : (
         <div className="overflow-x-auto bg-white rounded-2xl shadow-md border border-gray-200">
-          <table className="min-w-full text-sm">
+          <table className="min-w-full text-sm align-middle">
             <thead className="bg-blue-600 text-white text-left">
               <tr>
                 <th className="py-3 px-4 font-semibold">Patient Name</th>
                 <th className="py-3 px-4 font-semibold">Symptoms</th>
                 <th className="py-3 px-4 font-semibold">CNN Output</th>
                 <th className="py-3 px-4 font-semibold">Bayesian Output</th>
-                <th className="py-3 px-4 text-center font-semibold">Actions</th>
+                <th className="py-3 px-4 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -167,19 +167,19 @@ export default function NewDiagnosis() {
                   <img
                     src={selectedCase.image_url}
                     alt="Patient X-ray"
-                    className="rounded-lg border shadow-md object-contain max-h-[400px] w-full hover:scale-[1.02] transition-transform"
+                    className="rounded-lg border shadow-md object-contain max-h-[400px] w-full "
                   />
                 </div>
 
                 {selectedCase.gradcam_url && (
-                  <div className="p-3 rounded-xl border border-gray-300 bg-gray-50 shadow-lg w-full">
-                    <p className="font-medium text-gray-700 mb-2 text-center">
-                      🔥 GradCAM Heatmap
+                  <div className="p-4 rounded-2xl bg-white shadow-md w-full border border-gray-200">
+                    <p className="font-semibold text-gray-800 mb-3 text-center flex items-center justify-center gap-2">
+                      🩻 Patient Uploaded X-ray
                     </p>
                     <img
-                      src={selectedCase.gradcam_url}
-                      alt="GradCAM Heatmap"
-                      className="rounded-lg border shadow-md object-contain max-h-[400px] w-full hover:scale-[1.02] transition-transform"
+                      src={selectedCase.image_url}
+                      alt="Patient X-ray"
+                      className="rounded-xl object-contain max-h-[450px] w-full"
                     />
                   </div>
                 )}
