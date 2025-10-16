@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { FileText, Eye, Loader2, X, Download, AlertCircle } from "lucide-react";
+import { FileText, Eye, Loader2, X, AlertCircle } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -18,10 +18,9 @@ export default function NewDiagnosis() {
         const response = await fetch(`${BACKEND_URL}/api/doctor/cases`);
         const data = await response.json();
         if (response.ok) setCases(data);
-        else setError("Failed to fetch cases from backend.");
+        else setError("Failed to fetch cases.");
       } catch (err) {
-        console.error("❌ Error fetching cases:", err);
-        setError("Server error. Please try again later.");
+        setError("Server error. Try again later.");
       } finally {
         setLoading(false);
       }
@@ -29,16 +28,10 @@ export default function NewDiagnosis() {
     fetchCases();
   }, []);
 
-  // 🧾 Convert report to PDF
   const downloadPDF = async () => {
     if (!reportRef.current) return;
     const input = reportRef.current;
-
-    const canvas = await html2canvas(input, {
-      scale: 2,
-      useCORS: true,
-    });
-
+    const canvas = await html2canvas(input, { scale: 2, useCORS: true });
     const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF("p", "mm", "a4");
     const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -54,7 +47,6 @@ export default function NewDiagnosis() {
         Patient Diagnoses
       </h1>
 
-      {/* --- Loading / Error / Table --- */}
       {loading ? (
         <div className="flex justify-center items-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -73,37 +65,29 @@ export default function NewDiagnosis() {
           <table className="min-w-full text-sm align-middle">
             <thead className="bg-blue-600 text-white text-left">
               <tr>
-                <th className="py-3 px-4 font-semibold">Patient Name</th>
-                <th className="py-3 px-4 font-semibold">Symptoms</th>
-                <th className="py-3 px-4 font-semibold">CNN Output</th>
-                <th className="py-3 px-4 font-semibold">Bayesian Output</th>
-                <th className="py-3 px-4 font-semibold">Actions</th>
+                <th className="py-3 px-4">Patient Name</th>
+                <th className="py-3 px-4">Symptoms</th>
+                <th className="py-3 px-4">Prediction</th>
+                <th className="py-3 px-4">Confidence</th>
+                <th className="py-3 px-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {cases.map((c) => (
                 <tr
                   key={c.id}
-                  className="hover:bg-blue-50 border-b border-gray-100 transition"
+                  className="text-black hover:bg-blue-50 border-b transition"
                 >
-                  <td className="py-3 px-4 text-black">
-                    {c.patient_name || "Unknown"}
-                  </td>
-                  <td className="py-3 px-4 text-gray-700 truncate max-w-xs">
-                    {c.symptoms || "—"}
-                  </td>
-                  <td className="py-3 px-4 font-medium text-blue-600">
-                    {c.cnn_output || "Pending"}
-                  </td>
-                  <td className="py-3 px-4 text-gray-700">
-                    {c.analysis_output || "Pending"}
-                  </td>
+                  <td className="py-3 px-4">{c.patient_name}</td>
+                  <td className="py-3 px-4">{c.symptoms}</td>
+                  <td className="py-3 px-4 text-red-600">{c.cnn_output}</td>
+                  <td className="py-3 px-4">{c.analysis_output}</td>
                   <td className="py-3 px-4 text-center">
                     <button
                       onClick={() => setSelectedCase(c)}
-                      className="flex items-center justify-center gap-2 !bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition"
+                      className="!bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
                     >
-                      <Eye className="w-4 h-4" /> View Report
+                      <Eye className="w-4 h-4 inline mr-1" /> View
                     </button>
                   </td>
                 </tr>
@@ -113,23 +97,24 @@ export default function NewDiagnosis() {
         </div>
       )}
 
-      {/* --- Modal: Patient Report --- */}
       {selectedCase && (
         <div className="fixed inset-0 bg-white flex justify-center items-center z-50">
-          <div className="bg-white border border-gray-300 rounded-2xl shadow-2xl p-8 w-[90%] md:w-[75%] max-h-[90vh] overflow-y-auto relative transition-all duration-300 hover:shadow-[0_10px_40px_rgba(0,0,0,0.2)]">
+          <div
+            ref={reportRef}
+            className="bg-white border border-gray-300 rounded-2xl shadow-2xl p-8 w-[90%] md:w-[75%] max-h-[90vh] overflow-y-auto relative"
+          >
             <button
               onClick={() => setSelectedCase(null)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-black transition"
+              className="absolute top-4 right-4 text-gray-500 hover:text-black"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <h2 className="text-2xl font-bold text-blue-700 mb-5 border-b-2 border-blue-600 pb-2">
+            <h2 className="text-2xl font-bold text-blue-700 mb-4">
               Patient Report
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-              {/* LEFT SIDE: DETAILS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2 text-gray-800">
                 <p>
                   <strong>Name:</strong> {selectedCase.patient_name}
@@ -145,53 +130,40 @@ export default function NewDiagnosis() {
                   <strong>Symptoms:</strong> {selectedCase.symptoms}
                 </p>
                 <p>
-                  <strong>CNN Output:</strong>{" "}
-                  <span className="text-blue-700 font-semibold">
-                    {selectedCase.cnn_output}
-                  </span>
+                  <strong>Prediction:</strong> {selectedCase.cnn_output}
                 </p>
                 <p>
-                  <strong>Bayesian Output:</strong>{" "}
-                  <span className="text-gray-700 font-semibold">
-                    {selectedCase.analysis_output}
-                  </span>
+                  <strong>Confidence:</strong> {selectedCase.analysis_output}
                 </p>
               </div>
 
-              {/* RIGHT SIDE: IMAGES */}
-              <div className="flex flex-col items-center gap-6">
-                <div className="p-3 rounded-xl border border-gray-300 bg-gray-50 shadow-lg w-full">
-                  <p className="font-medium text-gray-700 mb-2 text-center">
-                    🩻 Patient Uploaded X-ray
-                  </p>
-                  <img
-                    src={selectedCase.image_url}
-                    alt="Patient X-ray"
-                    className="rounded-lg border shadow-md object-contain max-h-[400px] w-full "
-                  />
-                </div>
-
-                {selectedCase.gradcam_url && (
-                  <div className="p-4 rounded-2xl bg-white shadow-md w-full border border-gray-200">
-                    <p className="font-semibold text-gray-800 mb-3 text-center flex items-center justify-center gap-2">
-                      🩻 Patient Uploaded X-ray
+              <div className="flex flex-col items-center">
+                {selectedCase.gradcam_url ? (
+                  <div className="p-3 border rounded-xl shadow-md bg-gray-50">
+                    <p className="text-center text-gray-700 mb-2">
+                      🔥 Grad-CAM Heatmap
                     </p>
                     <img
-                      src={selectedCase.image_url}
-                      alt="Patient X-ray"
-                      className="rounded-xl object-contain max-h-[450px] w-full"
+                      src={selectedCase.gradcam_url}
+                      alt="GradCAM Heatmap"
+                      className="rounded-lg object-contain max-h-[450px] w-full"
                     />
                   </div>
+                ) : (
+                  <p className="text-gray-600 text-center">
+                    ⚠️ No Grad-CAM image available.
+                  </p>
                 )}
               </div>
             </div>
 
-            <div className="flex justify-end mt-8">
+            <div className="flex justify-end mt-6">
               <button
-                onClick={() => window.print()}
-                className="!bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-xl font-medium flex items-center gap-2 transition"
+                onClick={downloadPDF}
+                className="!bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-xl"
               >
-                <FileText className="w-4 h-4" /> Download Report (PDF)
+                <FileText className="w-4 h-4 inline mr-2" /> Download Report
+                (PDF)
               </button>
             </div>
           </div>

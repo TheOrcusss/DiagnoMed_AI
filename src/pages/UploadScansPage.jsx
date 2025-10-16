@@ -61,7 +61,8 @@ export default function UploadScansPage() {
       {/* Description */}
       <p className="mb-6 text-gray-600">
         Upload your X-rays, MRIs, or CT scans for AI-assisted analysis. <br />
-        Our models detect patterns and anomalies in medical imaging with high accuracy.
+        Our models detect patterns and anomalies in medical imaging with high
+        accuracy.
       </p>
 
       {/* Upload Form */}

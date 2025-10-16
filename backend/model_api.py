@@ -68,6 +68,8 @@ def generate_gradcam(model, img_array, original_path, save_dir="static/heatmaps"
 
     except Exception as e:
         print("⚠️ GradCAM generation failed:", e)
+        print(f"⚠️ GradCAM generation failed for image: {original_path}")
+
         return None
 
 
@@ -102,8 +104,10 @@ def predict_image(img_path):
         heatmap_info = generate_gradcam(densenet_model, img_array, img_path)
 
         print(f"🧠 Prediction: {cnn_output} ({confidence*100:.2f}%)")
-        if heatmap_info:
-            print(f"🔥 GradCAM Path: {heatmap_info['local_path']}")
+        if not heatmap_info:
+            print("⚠️ GradCAM was not returned properly.")
+        else:
+            print(f"✅ GradCAM generated: {heatmap_info}")
 
         return cnn_output, confidence, heatmap_info
 
