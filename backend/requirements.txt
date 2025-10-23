@@ -6,3 +6,4 @@ tensorflow
 numpy
 opencv-python
 python-dotenv
+werkzeug

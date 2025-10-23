@@ -2,19 +2,33 @@ import os
 from cnn_model_loader import predict_xray
 
 def predict_image(img_path):
-    """Run model inference and return prediction + heatmap."""
+    """Run CNN model inference and return prediction + GradCAM heatmap info."""
     try:
-        label, confidence, gradcam_path = predict_xray(img_path)
+        # Run inference using cnn_model_loader
+        label, confidence, heatmap_info = predict_xray(img_path)
 
-        if not gradcam_path or not os.path.exists(gradcam_path):
-            raise FileNotFoundError("GradCAM file not found")
+        if not heatmap_info or not os.path.exists(heatmap_info["local_path"]):
+            print("⚠️ GradCAM not found or generation failed.")
+            return {
+                "label": label,
+                "confidence": confidence,
+                "gradcam_web": None,
+                "gradcam_local": None
+            }
 
+        print(f"✅ GradCAM generated: {heatmap_info['local_path']}")
         return {
             "label": label,
             "confidence": confidence,
-            "gradcam_web": f"/static/heatmaps/{os.path.basename(gradcam_path)}",
-            "gradcam_local": os.path.abspath(gradcam_path)
+            "gradcam_web": heatmap_info["web_path"],
+            "gradcam_local": heatmap_info["local_path"],
         }
+
     except Exception as e:
         print(f"❌ Model inference failed: {e}")
-        return None
+        return {
+            "label": "Error",
+            "confidence": 0.0,
+            "gradcam_web": None,
+            "gradcam_local": None,
+        }
