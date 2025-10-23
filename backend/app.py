@@ -25,7 +25,7 @@ os.makedirs(app.config["HEATMAP_FOLDER"], exist_ok=True)
 
 # ------------------ DATABASE MODEL ------------------
 class PatientCase(db.Model):
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id = db.Column(db.String, primary_key=True)
     patient_name = db.Column(db.String(120))
     symptoms = db.Column(db.Text)
     image_url = db.Column(db.String(255))
