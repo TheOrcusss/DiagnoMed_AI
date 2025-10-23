@@ -1,10 +1,36 @@
-flask==3.0.3
-flask_sqlalchemy==3.1.1
-flask_cors==4.0.0
-flask_migrate==4.0.4
-psycopg2-binary==2.9.9
-werkzeug==3.0.3
-tensorflow==2.16.1
-opencv-python==4.10.0.84
-python-dotenv==1.0.1
-numpy==1.26.4
+# -------------------------------
+# 🧠 Core Web Framework
+# -------------------------------
+flask
+flask_sqlalchemy
+flask_cors
+flask_migrate
+werkzeug
+gunicorn
+
+# -------------------------------
+# 🗄️ Database & Drivers
+# -------------------------------
+psycopg2-binary
+
+# -------------------------------
+# 🧬 Deep Learning & Math
+# -------------------------------
+tensorflow
+numpy
+
+# -------------------------------
+# 🖼️ Image Processing
+# -------------------------------
+opencv-python
+Pillow
+
+# -------------------------------
+# ⚙️ Utilities
+# -------------------------------
+python-dotenv
+
+# -------------------------------
+# 🧪 Optional (safe defaults)
+# -------------------------------
+matplotlib
