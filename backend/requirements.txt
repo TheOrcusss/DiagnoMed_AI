@@ -1,36 +1,8 @@
-# -------------------------------
-# 🧠 Core Web Framework
-# -------------------------------
 flask
 flask_sqlalchemy
 flask_cors
-flask_migrate
-werkzeug
-gunicorn
-
-# -------------------------------
-# 🗄️ Database & Drivers
-# -------------------------------
 psycopg2-binary
-
-# -------------------------------
-# 🧬 Deep Learning & Math
-# -------------------------------
 tensorflow
 numpy
-
-# -------------------------------
-# 🖼️ Image Processing
-# -------------------------------
 opencv-python
-Pillow
-
-# -------------------------------
-# ⚙️ Utilities
-# -------------------------------
 python-dotenv
-
-# -------------------------------
-# 🧪 Optional (safe defaults)
-# -------------------------------
-matplotlib

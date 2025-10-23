@@ -12,13 +12,17 @@ export default function NewDiagnosis() {
   const [selectedCase, setSelectedCase] = useState(null);
   const reportRef = useRef();
 
+  // Fetch all patient cases from backend
   useEffect(() => {
     const fetchCases = async () => {
       try {
-        const response = await fetch(`${BACKEND_URL}/api/doctor/cases`);
-        const data = await response.json();
-        if (response.ok) setCases(data);
-        else setError("Failed to fetch cases.");
+        const res = await fetch(`${BACKEND_URL}/api/doctor/cases`);
+        const data = await res.json();
+        if (res.ok) {
+          setCases(data);
+        } else {
+          setError(data.error || "Failed to fetch cases.");
+        }
       } catch (err) {
         setError("Server error. Try again later.");
       } finally {
@@ -28,6 +32,7 @@ export default function NewDiagnosis() {
     fetchCases();
   }, []);
 
+  // Export PDF report
   const downloadPDF = async () => {
     if (!reportRef.current) return;
     const input = reportRef.current;
@@ -67,8 +72,8 @@ export default function NewDiagnosis() {
               <tr>
                 <th className="py-3 px-4">Patient Name</th>
                 <th className="py-3 px-4">Symptoms</th>
-                <th className="py-3 px-4">Prediction</th>
-                <th className="py-3 px-4">Confidence</th>
+                <th className="py-3 px-4">CNN Output</th>
+                <th className="py-3 px-4">Analysis Output</th>
                 <th className="py-3 px-4">Actions</th>
               </tr>
             </thead>
@@ -78,10 +83,14 @@ export default function NewDiagnosis() {
                   key={c.id}
                   className="text-black hover:bg-blue-50 border-b transition"
                 >
-                  <td className="py-3 px-4">{c.patient_name}</td>
-                  <td className="py-3 px-4">{c.symptoms}</td>
-                  <td className="py-3 px-4 text-red-600">{c.cnn_output}</td>
-                  <td className="py-3 px-4">{c.analysis_output}</td>
+                  <td className="py-3 px-4">{c.patient_name || "N/A"}</td>
+                  <td className="py-3 px-4">{c.symptoms || "N/A"}</td>
+                  <td className="py-3 px-4 text-red-600">
+                    {c.cnn_output || "Pending"}
+                  </td>
+                  <td className="py-3 px-4">
+                    {c.analysis_output || "Awaiting Review"}
+                  </td>
                   <td className="py-3 px-4 text-center">
                     <button
                       onClick={() => setSelectedCase(c)}
@@ -97,6 +106,7 @@ export default function NewDiagnosis() {
         </div>
       )}
 
+      {/* ---------- Modal View ---------- */}
       {selectedCase && (
         <div className="fixed inset-0 bg-white flex justify-center items-center z-50">
           <div
@@ -115,6 +125,7 @@ export default function NewDiagnosis() {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Patient Details */}
               <div className="space-y-2 text-gray-800">
                 <p>
                   <strong>Name:</strong> {selectedCase.patient_name}
@@ -130,30 +141,55 @@ export default function NewDiagnosis() {
                   <strong>Symptoms:</strong> {selectedCase.symptoms}
                 </p>
                 <p>
-                  <strong>Prediction:</strong> {selectedCase.cnn_output}
+                  <strong>CNN Output:</strong>{" "}
+                  {selectedCase.cnn_output || "Not Analyzed"}
                 </p>
                 <p>
-                  <strong>Confidence:</strong> {selectedCase.analysis_output}
+                  <strong>Analysis Output:</strong>{" "}
+                  {selectedCase.analysis_output || "Pending Diagnosis"}
                 </p>
               </div>
 
-              <div className="flex flex-col items-center">
-                {selectedCase.gradcam_url ? (
-                  <div className="p-3 border rounded-xl shadow-md bg-gray-50">
-                    <p className="text-center text-gray-700 mb-2">
-                      🔥 Grad-CAM Heatmap
+              {/* Image Comparison Section */}
+              <div className="flex flex-col items-center space-y-3">
+                <p className="text-center text-gray-700 mb-2 font-medium">
+                  🩻 Original X-ray & Grad-CAM
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {selectedCase.image_url ? (
+                    <div className="p-2 border rounded-xl shadow-sm bg-gray-50 flex flex-col items-center">
+                      <p className="text-sm text-gray-700 mb-1">
+                        Original X-ray
+                      </p>
+                      <img
+                        src={`${BACKEND_URL}${selectedCase.image_url}`}
+                        alt="Uploaded X-ray"
+                        className="rounded-lg object-contain max-h-[300px] w-full"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-gray-600 text-center">
+                      ⚠️ No uploaded image available.
                     </p>
-                    <img
-                      src={selectedCase.gradcam_url}
-                      alt="GradCAM Heatmap"
-                      className="rounded-lg object-contain max-h-[450px] w-full"
-                    />
-                  </div>
-                ) : (
-                  <p className="text-gray-600 text-center">
-                    ⚠️ No Grad-CAM image available.
-                  </p>
-                )}
+                  )}
+
+                  {selectedCase.gradcam_url ? (
+                    <div className="p-2 border rounded-xl shadow-sm bg-gray-50 flex flex-col items-center">
+                      <p className="text-sm text-gray-700 mb-1">
+                        Grad-CAM Heatmap
+                      </p>
+                      <img
+                        src={`${BACKEND_URL}${selectedCase.gradcam_url}`}
+                        alt="GradCAM Heatmap"
+                        className="rounded-lg object-contain max-h-[300px] w-full"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-gray-600 text-center">
+                      ⚠️ No Grad-CAM available.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 

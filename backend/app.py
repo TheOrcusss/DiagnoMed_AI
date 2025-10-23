@@ -1,149 +1,105 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from flask_migrate import Migrate
-from dotenv import load_dotenv
+from model_api import predict_image
 import os, uuid
-from model_api import predict_image  # 🧠 Model prediction + GradCAM generator
-
-# ------------------ ENV & APP CONFIG ------------------
-load_dotenv(override=True)
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 CORS(app)
 
-# ------------------ DATABASE CONFIG ------------------
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
+# ------------------ DB CONFIG ------------------
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///health.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
-migrate = Migrate(app, db)
 
-# ------------------ FILE CONFIG ------------------
-app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
-app.config["HEATMAP_FOLDER"] = os.path.join("static", "heatmaps")
-os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-os.makedirs(app.config["HEATMAP_FOLDER"], exist_ok=True)
-
-# ------------------ DATABASE MODEL ------------------
+# ------------------ DB MODEL ------------------
 class PatientCase(db.Model):
-    __tablename__ = "patient_cases"
-
+    __tablename__ = "patient_case"
     id = db.Column(db.String, primary_key=True, default=lambda: str(uuid.uuid4()))
     patient_name = db.Column(db.String(120))
     age = db.Column(db.Integer)
-    blood_type = db.Column(db.String(5))
+    blood_type = db.Column(db.String(10))
     symptoms = db.Column(db.Text)
     image_url = db.Column(db.String(255))
     gradcam_url = db.Column(db.String(255))
-    gradcam_local = db.Column(db.String(255))
     cnn_output = db.Column(db.Text)
-    confidence = db.Column(db.Float)
     analysis_output = db.Column(db.Text)
 
     def to_dict(self):
-        return {
-            "id": self.id,
-            "patient_name": self.patient_name,
-            "age": self.age,
-            "blood_type": self.blood_type,
-            "symptoms": self.symptoms,
-            "image_url": self.image_url,
-            "gradcam_url": self.gradcam_url,
-            "cnn_output": self.cnn_output,
-            "confidence": self.confidence,
-            "analysis_output": self.analysis_output,
-        }
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
-# ------------------ PATIENT SUBMIT ROUTE ------------------
+
+# ------------------ ROUTES ------------------
 @app.route("/api/patient/submit", methods=["POST"])
-def patient_submit():
+def upload_scan():
+    """Upload image → preprocess → infer → store → return result."""
     try:
-        # Get patient data
-        name = request.form.get("name")
-        age = request.form.get("age")
-        blood_type = request.form.get("blood_type")
-        symptoms = request.form.get("symptoms")
-        file = request.files.get("image")
+        name = request.form.get("name", "Anonymous")
+        symptoms = request.form.get("symptoms", "")
+        image = request.files.get("image")
 
-        if not file:
-            return jsonify({"error": "No file uploaded"}), 400
+        if not image:
+            return jsonify({"error": "No image uploaded"}), 400
 
         # Save uploaded file
-        filename = f"{uuid.uuid4()}_{file.filename}"
-        filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(filepath)
+        upload_folder = os.path.join("static", "uploads")
+        os.makedirs(upload_folder, exist_ok=True)
+        
+        filename = f"{uuid.uuid4()}_{image.filename}"
+        img_path = os.path.join(upload_folder, filename)
+        image.save(img_path)
 
-        base_url = request.host_url.rstrip("/")
-        public_url = f"{base_url}/static/uploads/{filename}"
+        image_url = f"/static/uploads/{filename}"
 
-        # ------------------ MODEL PREDICTION ------------------
-        cnn_output, confidence, heatmap_info = predict_image(filepath)
-        if not heatmap_info:
-            raise RuntimeError("GradCAM generation failed")
+        # Run CNN inference (preprocessing + GradCAM)
+        result = predict_image(img_path)
+        
+        if not result:
+            return jsonify({"error": "Model failed to process image"}), 500
 
-        gradcam_web_url = f"{base_url}{heatmap_info['web_path']}"
-        gradcam_local_path = heatmap_info["local_path"]
-        analysis_output = f"Detected: {cnn_output} (Confidence: {confidence:.2f})"
+        label = result["label"]
+        confidence = result["confidence"]
+        gradcam_url = result["gradcam_web"]
 
-        # ------------------ SAVE TO DATABASE ------------------
+        # Save to database
         case = PatientCase(
             patient_name=name,
-            age=int(age) if age else None,
-            blood_type=blood_type,
             symptoms=symptoms,
-            image_url=public_url,
-            gradcam_url=gradcam_web_url,
-            gradcam_local=gradcam_local_path,
-            cnn_output=cnn_output,
-            confidence=confidence,
-            analysis_output=analysis_output,
+            image_url=image_url,
+            gradcam_url=gradcam_url,
+            cnn_output=f"{label} ({confidence*100:.2f}%)",
+            analysis_output="Awaiting doctor’s review"
         )
+        
         db.session.add(case)
         db.session.commit()
 
-        print(f"✅ Case saved: {case.id} ({cnn_output} - {confidence:.2f})")
-
         return jsonify({
-            "message": "Case submitted successfully!",
-            "cnn_output": cnn_output,
+            "message": "Scan processed successfully",
+            "cnn_output": case.cnn_output,
             "confidence": confidence,
-            "analysis_output": analysis_output,
-            "image_url": public_url,
-            "gradcam_url": gradcam_web_url,
-        }), 200
+            "image_url": image_url,
+            "gradcam_url": gradcam_url
+        })
 
     except Exception as e:
-        print("❌ Error during submission:", e)
-        return jsonify({"error": str(e)}), 500
+        print(f"❌ Upload error: {e}")
+        return jsonify({"error": "Failed to process image"}), 500
 
 
-# ------------------ DOCTOR VIEW (All Cases) ------------------
 @app.route("/api/doctor/cases", methods=["GET"])
-def doctor_cases():
+def get_cases():
+    """Fetch all stored patient cases."""
     try:
-        cases = PatientCase.query.order_by(PatientCase.id.desc()).all()
-        return jsonify([c.to_dict() for c in cases]), 200
+        cases = PatientCase.query.all()
+        return jsonify([c.to_dict() for c in cases])
     except Exception as e:
         print("❌ Fetch error:", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Database fetch failed"}), 500
 
 
-# ------------------ FRONTEND SERVE ------------------
-@app.route("/", defaults={"path": ""})
-@app.route("/<path:path>")
-def serve_frontend(path):
-    dist_dir = os.path.join(os.path.dirname(__file__), "dist")
-    if not os.path.exists(dist_dir):
-        return jsonify({"message": "✅ Backend connected and running!"})
-    if path != "" and os.path.exists(os.path.join(dist_dir, path)):
-        return send_from_directory(dist_dir, path)
-    else:
-        return send_from_directory(dist_dir, "index.html")
-
-
-# ------------------ MAIN ENTRY ------------------
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-        print("📦 Database tables ensured.")
+        print("📦 Database initialized")
     app.run(host="0.0.0.0", port=5000, debug=True)
