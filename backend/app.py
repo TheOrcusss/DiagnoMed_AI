@@ -57,42 +57,46 @@ class PatientCase(db.Model):
         }
 
 # ------------------ CALL HUGGING FACE MODEL ------------------
+
 def call_huggingface_model(image_path):
-    """
-    Sends the X-ray image to Hugging Face Space and gets back predictions + GradCAM.
-    """
     try:
-        print(f"📤 Sending {image_path} to Hugging Face model...")
-        result = client.predict(
-            img=handle_file(image_path),
-            api_name="/predict"   # must match your app.py in Hugging Face Space
+        print(f"📤 Sending image to Hugging Face model: {HF_SPACE}")
+
+        response = requests.post(
+            f"{HF_SPACE}/predict",
+            files={"img": open(image_path, "rb")},
+            timeout=120,
         )
 
-        # Expected format: [ { 'predictions': {...}, 'gradcam_url': '/file/...' }, <gradcam_img> ]
-        if isinstance(result, list) and len(result) > 0:
-            data = result[0]
-            predictions = data.get("predictions", {})
-            gradcam_url = data.get("gradcam_url")
+        print(f"🧠 Status Code: {response.status_code}")
+        if response.status_code != 200:
+            print("❌ Hugging Face API Error:", response.text)
+            return None
 
-            top_label = max(predictions, key=predictions.get)
-            confidence = predictions[top_label]
+        result = response.json()
+        print("🧩 Full HF Response:", result)
 
-            print(f"✅ Top: {top_label} ({confidence*100:.2f}%)")
-            print(f"🔥 GradCAM: {gradcam_url}")
+        # Extract predictions and gradcam from result
+        if "data" in result and isinstance(result["data"], list):
+            data = result["data"][0]
+            if isinstance(data, dict) and "predictions" in data:
+                preds = data["predictions"]
+                top_label = max(preds, key=preds.get)
+                confidence = preds[top_label]
+                gradcam_url = data.get("gradcam_url")
+                return {
+                    "label": top_label,
+                    "confidence": confidence,
+                    "gradcam_url": gradcam_url,
+                }
 
-            return {
-                "label": top_label,
-                "confidence": confidence,
-                "predictions": predictions,
-                "gradcam_url": gradcam_url
-            }
-
-        print("⚠️ Unexpected response:", result)
+        print("⚠️ Unexpected response format received.")
         return None
 
     except Exception as e:
-        print(f"❌ Error calling Hugging Face Space: {e}")
+        print(f"❌ Exception calling Hugging Face: {e}")
         return None
+
 
 # ------------------ PATIENT UPLOAD ROUTE ------------------
 @app.route("/api/patient/submit", methods=["POST"])
@@ -159,15 +163,28 @@ def submit_patient_case():
         return jsonify({"error": str(e)}), 500
 
 # ------------------ DOCTOR FETCH ALL CASES ------------------
-@app.route("/api/doctor/cases", methods=["GET"])
-def get_all_cases():
+@app.route('/api/doctor/cases', methods=['GET'])
+def get_doctor_cases():
     try:
         cases = PatientCase.query.all()
-        print(f"📄 Retrieved {len(cases)} cases.")
-        return jsonify([case.to_dict() for case in cases]), 200
+        return jsonify([
+            {
+                "id": c.id,
+                "patient_name": c.patient_name,
+                "age": c.age,
+                "blood_type": c.blood_type,
+                "symptoms": c.symptoms,
+                "cnn_output": c.cnn_output,
+                "analysis_output": c.analysis_output,
+                "image_url": c.image_url,
+                "gradcam_url": c.gradcam_url,
+            }
+            for c in cases
+        ])
     except Exception as e:
-        print(f"❌ Error fetching cases: {e}")
-        return jsonify({"error": "Failed to fetch cases"}), 500
+        print("❌ Error fetching doctor cases:", e)
+        return jsonify({"error": "Server error"}), 500
+
 
 # ------------------ FRONTEND ROUTE ------------------
 @app.route("/", defaults={"path": ""})
