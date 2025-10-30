@@ -9,3 +9,4 @@ opencv-python-headless
 python-dotenv
 werkzeug
 gunicorn
+gradio_client

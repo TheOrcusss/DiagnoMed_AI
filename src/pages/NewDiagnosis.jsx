@@ -1,5 +1,12 @@
 import React, { useEffect, useState, useRef } from "react";
-import { FileText, Eye, Loader2, X, AlertCircle } from "lucide-react";
+import {
+  FileText,
+  Eye,
+  Loader2,
+  X,
+  AlertCircle,
+  BarChart3,
+} from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -12,17 +19,14 @@ export default function NewDiagnosis() {
   const [selectedCase, setSelectedCase] = useState(null);
   const reportRef = useRef();
 
-  // Fetch all patient cases from backend
+  // ---------- Fetch all patient cases ----------
   useEffect(() => {
     const fetchCases = async () => {
       try {
         const res = await fetch(`${BACKEND_URL}/api/doctor/cases`);
         const data = await res.json();
-        if (res.ok) {
-          setCases(data);
-        } else {
-          setError(data.error || "Failed to fetch cases.");
-        }
+        if (res.ok) setCases(data);
+        else setError(data.error || "Failed to fetch cases.");
       } catch (err) {
         setError("Server error. Try again later.");
       } finally {
@@ -32,7 +36,7 @@ export default function NewDiagnosis() {
     fetchCases();
   }, []);
 
-  // Export PDF report
+  // ---------- PDF Export ----------
   const downloadPDF = async () => {
     if (!reportRef.current) return;
     const input = reportRef.current;
@@ -52,6 +56,7 @@ export default function NewDiagnosis() {
         Patient Diagnoses
       </h1>
 
+      {/* ---------- Loading / Error / Empty ---------- */}
       {loading ? (
         <div className="flex justify-center items-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -125,7 +130,7 @@ export default function NewDiagnosis() {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Patient Details */}
+              {/* ---------- Patient Info ---------- */}
               <div className="space-y-2 text-gray-800">
                 <p>
                   <strong>Name:</strong> {selectedCase.patient_name}
@@ -144,27 +149,37 @@ export default function NewDiagnosis() {
                   <strong>CNN Output:</strong>{" "}
                   {selectedCase.cnn_output || "Not Analyzed"}
                 </p>
-                <p>
-                  <strong>Analysis Output:</strong>{" "}
-                  {selectedCase.analysis_output || "Pending Diagnosis"}
-                </p>
+
+                {/* Top 3 Predictions */}
+                {selectedCase.analysis_output && (
+                  <div className="mt-3 p-3 bg-gray-50 border rounded-xl shadow-sm">
+                    <p className="font-semibold text-blue-600 flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4" /> Top 3 Predictions
+                    </p>
+                    <p className="text-gray-800 mt-1">
+                      {selectedCase.analysis_output}
+                    </p>
+                  </div>
+                )}
               </div>
 
-              {/* Image Comparison Section */}
+              {/* ---------- Image Section ---------- */}
               <div className="flex flex-col items-center space-y-3">
                 <p className="text-center text-gray-700 mb-2 font-medium">
                   🩻 Original X-ray & Grad-CAM
                 </p>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Original X-ray */}
                   {selectedCase.image_url ? (
-                    <div className="p-2 border rounded-xl shadow-sm bg-gray-50 flex flex-col items-center">
-                      <p className="text-sm text-gray-700 mb-1">
+                    <div className="p-3 border rounded-2xl shadow-md bg-white flex flex-col items-center">
+                      <p className="text-sm text-gray-700 mb-1 font-medium">
                         Original X-ray
                       </p>
                       <img
                         src={`${BACKEND_URL}${selectedCase.image_url}`}
                         alt="Uploaded X-ray"
-                        className="rounded-lg object-contain max-h-[300px] w-full"
+                        className="rounded-lg object-contain max-h-[300px] w-full border border-gray-200"
                       />
                     </div>
                   ) : (
@@ -173,15 +188,16 @@ export default function NewDiagnosis() {
                     </p>
                   )}
 
+                  {/* Grad-CAM */}
                   {selectedCase.gradcam_url ? (
-                    <div className="p-2 border rounded-xl shadow-sm bg-gray-50 flex flex-col items-center">
-                      <p className="text-sm text-gray-700 mb-1">
+                    <div className="p-3 border rounded-2xl shadow-md bg-white flex flex-col items-center">
+                      <p className="text-sm text-gray-700 mb-1 font-medium">
                         Grad-CAM Heatmap
                       </p>
                       <img
                         src={`${BACKEND_URL}${selectedCase.gradcam_url}`}
                         alt="GradCAM Heatmap"
-                        className="rounded-lg object-contain max-h-[300px] w-full"
+                        className="rounded-lg object-contain max-h-[300px] w-full border border-gray-200"
                       />
                     </div>
                   ) : (

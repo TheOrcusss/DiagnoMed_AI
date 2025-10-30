@@ -1,47 +1,60 @@
 import requests
+from gradio_client import Client, handle_file
 import os
 
-# Hugging Face Space API URL – replace with your own Space
-HF_SPACE_API = "https://NoobMaster27-DDX.hf.space/"
+# ---------------- CONFIG ----------------
+# ⚠️ Replace with your Hugging Face Space name (exactly as shown in the URL)
+HF_SPACE = "NoobMaster27/DDX"
+HF_API = f"https://{HF_SPACE.lower().replace('/', '-')}.hf.space/"
 
-def predict_image(image_path):
+print(f"✅ Using Hugging Face Space API: {HF_API}")
+
+# ---------------- PREDICT FUNCTION ----------------
+def predict_image(image_path: str):
     """
-    Sends an image to your Hugging Face Space for prediction and Grad-CAM generation.
-    Returns a dictionary with label, confidence, and Grad-CAM URL.
+    Sends image to the Hugging Face Space and retrieves model prediction & GradCAM heatmap.
     """
     try:
-        print(f"🧠 Sending image to Hugging Face API: {HF_SPACE_API}")
+        print(f"📤 Sending image to Hugging Face Space: {HF_SPACE}")
+        client = Client(HF_SPACE)
 
-        with open(image_path, "rb") as f:
-            response = requests.post(HF_SPACE_API, files={"img": f})
+        result = client.predict(
+            img=handle_file(image_path),
+            api_name="/predict"   # must match your app.py endpoint name in Hugging Face
+        )
 
-        if response.status_code != 200:
-            print("❌ API call failed:", response.text)
+        # 🧩 Expected format:
+        # result = [
+        #   {'predictions': {'Pneumonia': 0.39, 'Edema': 0.23, 'Effusion': 0.11}, 'gradcam_url': '/file/gradcams/...jpg'},
+        #   <gradcam image array>
+        # ]
+
+        if isinstance(result, list) and len(result) > 0:
+            data = result[0]  # First dict element
+            predictions = data.get("predictions", {})
+            gradcam_url = data.get("gradcam_url")
+
+            if not predictions:
+                print("⚠️ No predictions returned.")
+                return None
+
+            # Extract top class
+            top_label = max(predictions, key=predictions.get)
+            confidence = predictions[top_label]
+
+            print(f"✅ Top Prediction: {top_label} ({confidence*100:.2f}%)")
+            print(f"🔥 GradCAM URL: {gradcam_url}")
+
+            return {
+                "label": top_label,
+                "confidence": confidence,
+                "predictions": predictions,
+                "gradcam_url": gradcam_url,
+            }
+        else:
+            print("⚠️ Unexpected response format from Hugging Face API:", result)
             return None
-
-        data = response.json()
-        print("✅ API Response:", data)
-
-        # Parse response from Hugging Face Space
-        predictions = data.get("data", [{}])[0]
-        gradcam_url = data.get("data", [None, None])[1]
-
-        if not predictions:
-            return None
-
-        # Extract top label and confidence
-        top_label = max(predictions.items(), key=lambda x: x[1])[0]
-        confidence = predictions[top_label]
-
-        result = {
-            "label": top_label,
-            "confidence": confidence,
-            "all_predictions": predictions,
-            "gradcam_web": f"https://NoobMaster27-DDX.hf.space{gradcam_url}" if gradcam_url else None
-        }
-
-        return result
 
     except Exception as e:
-        print("⚠️ Error calling Hugging Face API:", e)
+        print(f"❌ Error calling Hugging Face Space: {e}")
         return None

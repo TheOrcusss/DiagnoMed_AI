@@ -1,15 +1,13 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+from dotenv import load_dotenv
 import os
-import requests
 import uuid
-
+from gradio_client import Client, handle_file
 
 # ------------------ LOAD ENVIRONMENT ------------------
-from dotenv import load_dotenv
 load_dotenv(override=True)
-
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 # ------------------ FLASK CONFIG ------------------
@@ -25,9 +23,10 @@ db = SQLAlchemy(app)
 app.config["UPLOAD_FOLDER"] = "static/uploads"
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-# ------------------ HUGGING FACE MODEL API ------------------
-# (Replace with your actual Space URL)
-HUGGINGFACE_MODEL_API = "https://noobmaster27-ddx.hf.space/"
+# ------------------ HUGGING FACE MODEL CONFIG ------------------
+HF_SPACE = "NoobMaster27/DDX"  # Your Hugging Face Space name
+client = Client(HF_SPACE)
+print(f"✅ Connected to Hugging Face Space: {HF_SPACE}")
 
 # ------------------ DATABASE MODEL ------------------
 class PatientCase(db.Model):
@@ -56,39 +55,43 @@ class PatientCase(db.Model):
             "analysis_output": self.analysis_output,
         }
 
-# ------------------ FUNCTION: SEND IMAGE TO HUGGING FACE ------------------
+# ------------------ CALL HUGGING FACE MODEL ------------------
 def call_huggingface_model(image_path):
+    """
+    Sends the X-ray image to Hugging Face Space and gets back predictions + GradCAM.
+    """
     try:
-        print(f"📤 Sending image to Hugging Face model: {HUGGINGFACE_MODEL_API}")
-        with open(image_path, "rb") as f:
-            response = requests.post(HUGGINGFACE_MODEL_API, files={"data": f}, timeout=120)
+        print(f"📤 Sending {image_path} to Hugging Face model...")
+        result = client.predict(
+            img=handle_file(image_path),
+            api_name="/predict"   # must match your app.py in Hugging Face Space
+        )
 
-        if response.status_code != 200:
-            print("❌ Hugging Face error:", response.text)
-            return None
+        # Expected format: [ { 'predictions': {...}, 'gradcam_url': '/file/...' }, <gradcam_img> ]
+        if isinstance(result, list) and len(result) > 0:
+            data = result[0]
+            predictions = data.get("predictions", {})
+            gradcam_url = data.get("gradcam_url")
 
-        result = response.json()
-        print("🧠 HF Response:", result)
+            top_label = max(predictions, key=predictions.get)
+            confidence = predictions[top_label]
 
-        # Adjust this depending on your HF output structure
-        if "data" in result:
-            predictions = result["data"][0]
-            top_label = list(predictions.keys())[0]
-            top_conf = list(predictions.values())[0]
-            gradcam_url = result["data"][1] if len(result["data"]) > 1 else None
+            print(f"✅ Top: {top_label} ({confidence*100:.2f}%)")
+            print(f"🔥 GradCAM: {gradcam_url}")
 
             return {
                 "label": top_label,
-                "confidence": top_conf,
+                "confidence": confidence,
+                "predictions": predictions,
                 "gradcam_url": gradcam_url
             }
 
+        print("⚠️ Unexpected response:", result)
         return None
 
     except Exception as e:
-        print(f"❌ Exception calling Hugging Face: {e}")
+        print(f"❌ Error calling Hugging Face Space: {e}")
         return None
-
 
 # ------------------ PATIENT UPLOAD ROUTE ------------------
 @app.route("/api/patient/submit", methods=["POST"])
@@ -103,26 +106,29 @@ def submit_patient_case():
         if not image_file:
             return jsonify({"error": "No image uploaded"}), 400
 
-        # Save uploaded image locally
+        # Save uploaded image
         filename = f"{uuid.uuid4()}_{image_file.filename}"
         image_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
         image_file.save(image_path)
-        print(f"📸 Saved uploaded image: {image_path}")
+        print(f"📸 Saved image at {image_path}")
 
-        # Call Hugging Face model API
-        print("🧠 Sending to Hugging Face for prediction...")
+        # Run model inference
         prediction = call_huggingface_model(image_path)
-
         if not prediction:
             return jsonify({"error": "Model inference failed"}), 500
 
-        cnn_output = prediction["label"]
-        confidence = prediction["confidence"]
+        predictions = prediction.get("predictions", {})
+        sorted_preds = sorted(predictions.items(), key=lambda x: x[1], reverse=True)[:3]
+        top3_text = ", ".join([f"{k} ({v*100:.2f}%)" for k, v in sorted_preds])
+
+        # Best prediction
+        cnn_output = sorted_preds[0][0]
+        confidence = sorted_preds[0][1]
         gradcam_url = prediction.get("gradcam_url")
 
-        analysis_output = f"Detected: {cnn_output} (Confidence: {confidence*100:.2f}%)"
+        analysis_output = f"Top 3 Predictions: {top3_text}"
 
-        # Save case to PostgreSQL
+        # Save to PostgreSQL
         case = PatientCase(
             patient_name=name,
             age=age,
@@ -137,7 +143,7 @@ def submit_patient_case():
 
         db.session.add(case)
         db.session.commit()
-        print("✅ Case saved successfully to PostgreSQL!")
+        print("✅ Case saved to database!")
 
         return jsonify({
             "message": "Case submitted successfully!",
@@ -151,18 +157,16 @@ def submit_patient_case():
         print(f"❌ Error in /api/patient/submit: {e}")
         return jsonify({"error": str(e)}), 500
 
-
 # ------------------ DOCTOR FETCH ALL CASES ------------------
 @app.route("/api/doctor/cases", methods=["GET"])
 def get_all_cases():
     try:
         cases = PatientCase.query.all()
-        print(f"📄 Retrieved {len(cases)} cases from DB.")
+        print(f"📄 Retrieved {len(cases)} cases.")
         return jsonify([case.to_dict() for case in cases]), 200
     except Exception as e:
         print(f"❌ Error fetching cases: {e}")
         return jsonify({"error": "Failed to fetch cases"}), 500
-
 
 # ------------------ FRONTEND ROUTE ------------------
 @app.route("/", defaults={"path": ""})
@@ -170,18 +174,17 @@ def get_all_cases():
 def serve_frontend(path):
     dist_dir = os.path.join(os.path.dirname(__file__), "dist")
     if not os.path.exists(dist_dir):
-        return jsonify({"message": "✅ Backend is running and connected to DB!"})
+        return jsonify({"message": "✅ Backend running, DB connected!"})
 
     if path != "" and os.path.exists(os.path.join(dist_dir, path)):
         return send_from_directory(dist_dir, path)
     else:
         return send_from_directory(dist_dir, "index.html")
 
-
 # ------------------ MAIN ENTRY ------------------
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-        print("✅ Database tables created successfully!")
+        print("✅ Database initialized successfully.")
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
