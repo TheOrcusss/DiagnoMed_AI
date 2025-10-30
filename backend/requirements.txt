@@ -2,8 +2,9 @@ flask
 flask_sqlalchemy
 flask_cors
 psycopg2-binary
-tensorflow
+tensorflow-cpu
 numpy
 opencv-python
+opencv-python-headless
 python-dotenv
 werkzeug
