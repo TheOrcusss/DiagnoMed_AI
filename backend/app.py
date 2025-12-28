@@ -60,28 +60,51 @@ class PatientCase(db.Model):
 # ------------------ CALL HUGGING FACE MODEL ------------------
 def call_huggingface_model(image_path):
     try:
-        print("📤 Sending image to Hugging Face Space")
+        print("📤 Sending image to Hugging Face Space...")
 
         result = client.predict(
             handle_file(image_path),
-            api_name="/predict"  # must match your Gradio app
+            api_name="/predict"  # CONFIRMED from your Space
         )
 
-        print("🧠 Raw HF result:", result)
+        print("🧠 HF raw result:", result)
 
-        # Example expected output structure:
-        # result = [label, confidence, gradcam_url]
+        # result is a DICT
+        # {
+        #   "predictions": {...},
+        #   "gradcam_url": "/file/gradcams/xxx.jpg"
+        # }
+
+        if not isinstance(result, dict):
+            print("❌ Unexpected HF response format")
+            return None
+
+        predictions = result.get("predictions", {})
+        gradcam_url = result.get("gradcam_url")
+
+        if not predictions:
+            print("❌ No predictions returned")
+            return None
+
+        # Sort top 3 predictions
+        sorted_preds = sorted(
+            predictions.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:3]
+
+        top_label, top_confidence = sorted_preds[0]
 
         return {
-            "label": result[0],
-            "confidence": float(result[1]),
-            "gradcam_url": result[2] if len(result) > 2 else None
+            "top_label": top_label,
+            "top_confidence": float(top_confidence),
+            "top3": sorted_preds,
+            "gradcam_url": gradcam_url
         }
 
     except Exception as e:
-        print("❌ Hugging Face error:", e)
+        print("❌ Hugging Face inference error:", e)
         return None
-
 
 # ------------------ PATIENT UPLOAD ROUTE ------------------
 @app.route("/api/patient/submit", methods=["POST"])
@@ -96,34 +119,29 @@ def submit_patient_case():
         if not image_file:
             return jsonify({"error": "No image uploaded"}), 400
 
-        # Save uploaded image
+        # ------------------ SAVE IMAGE ------------------
         filename = f"{uuid.uuid4()}_{image_file.filename}"
         image_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
         image_file.save(image_path)
         print(f"📸 Saved image at {image_path}")
 
-        # Run model inference
+        # ------------------ MODEL INFERENCE ------------------
         prediction = call_huggingface_model(image_path)
+        print("🔎 Prediction received:", prediction)
+
         if not prediction:
             return jsonify({"error": "Model inference failed"}), 500
 
-        cnn_output = prediction["label"]
-        confidence = prediction["confidence"]
+        cnn_output = prediction["top_label"]
+        confidence = prediction["top_confidence"]
         gradcam_url = prediction.get("gradcam_url")
 
-        analysis_output = f"Predicted Disease: {cnn_output} ({confidence*100:.2f}%)"
+        top3 = prediction["top3"]
+        analysis_output = "Top 3 Predictions: " + ", ".join(
+            [f"{k} ({v*100:.2f}%)" for k, v in top3]
+        )
 
-        sorted_preds = sorted(predictions.items(), key=lambda x: x[1], reverse=True)[:3]
-        top3_text = ", ".join([f"{k} ({v*100:.2f}%)" for k, v in sorted_preds])
-
-        # Best prediction
-        cnn_output = sorted_preds[0][0]
-        confidence = sorted_preds[0][1]
-        gradcam_url = prediction.get("gradcam_url")
-
-        analysis_output = f"Top 3 Predictions: {top3_text}"
-
-        # Save to PostgreSQL
+        # ------------------ SAVE TO DATABASE ------------------
         case = PatientCase(
             patient_name=name,
             age=age,
@@ -140,17 +158,20 @@ def submit_patient_case():
         db.session.commit()
         print("✅ Case saved to database!")
 
+        # ------------------ RESPONSE ------------------
         return jsonify({
             "message": "Case submitted successfully!",
             "cnn_output": cnn_output,
             "confidence": confidence,
             "gradcam_url": gradcam_url,
-            "image_url": f"/static/uploads/{filename}"
+            "image_url": f"/static/uploads/{filename}",
+            "analysis_output": analysis_output
         }), 200
 
     except Exception as e:
         print(f"❌ Error in /api/patient/submit: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 # ------------------ DOCTOR FETCH ALL CASES ------------------
 @app.route('/api/doctor/cases', methods=['GET'])
