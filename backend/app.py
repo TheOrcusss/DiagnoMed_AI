@@ -1,3 +1,4 @@
+import requests
 from flask import Flask, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -57,44 +58,28 @@ class PatientCase(db.Model):
         }
 
 # ------------------ CALL HUGGING FACE MODEL ------------------
-
 def call_huggingface_model(image_path):
     try:
-        print(f"📤 Sending image to Hugging Face model: {HF_SPACE}")
+        print("📤 Sending image to Hugging Face Space")
 
-        response = requests.post(
-            f"{HF_SPACE}/predict",
-            files={"img": open(image_path, "rb")},
-            timeout=120,
+        result = client.predict(
+            handle_file(image_path),
+            api_name="/predict"  # must match your Gradio app
         )
 
-        print(f"🧠 Status Code: {response.status_code}")
-        if response.status_code != 200:
-            print("❌ Hugging Face API Error:", response.text)
-            return None
+        print("🧠 Raw HF result:", result)
 
-        result = response.json()
-        print("🧩 Full HF Response:", result)
+        # Example expected output structure:
+        # result = [label, confidence, gradcam_url]
 
-        # Extract predictions and gradcam from result
-        if "data" in result and isinstance(result["data"], list):
-            data = result["data"][0]
-            if isinstance(data, dict) and "predictions" in data:
-                preds = data["predictions"]
-                top_label = max(preds, key=preds.get)
-                confidence = preds[top_label]
-                gradcam_url = data.get("gradcam_url")
-                return {
-                    "label": top_label,
-                    "confidence": confidence,
-                    "gradcam_url": gradcam_url,
-                }
-
-        print("⚠️ Unexpected response format received.")
-        return None
+        return {
+            "label": result[0],
+            "confidence": float(result[1]),
+            "gradcam_url": result[2] if len(result) > 2 else None
+        }
 
     except Exception as e:
-        print(f"❌ Exception calling Hugging Face: {e}")
+        print("❌ Hugging Face error:", e)
         return None
 
 
@@ -122,7 +107,12 @@ def submit_patient_case():
         if not prediction:
             return jsonify({"error": "Model inference failed"}), 500
 
-        predictions = prediction.get("predictions", {})
+        cnn_output = prediction["label"]
+        confidence = prediction["confidence"]
+        gradcam_url = prediction.get("gradcam_url")
+
+        analysis_output = f"Predicted Disease: {cnn_output} ({confidence*100:.2f}%)"
+
         sorted_preds = sorted(predictions.items(), key=lambda x: x[1], reverse=True)[:3]
         top3_text = ", ".join([f"{k} ({v*100:.2f}%)" for k, v in sorted_preds])
 

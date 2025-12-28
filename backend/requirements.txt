@@ -2,11 +2,8 @@ flask
 flask_sqlalchemy
 flask_cors
 psycopg2-binary
-tensorflow-cpu
-numpy
-opencv-python
-opencv-python-headless
 python-dotenv
 werkzeug
 gunicorn
 gradio_client
+requests
