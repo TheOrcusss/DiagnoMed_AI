@@ -58,35 +58,30 @@ class PatientCase(db.Model):
         }
 
 # ------------------ CALL HUGGING FACE MODEL ------------------
+from gradio_client import handle_file
+
+HF_BASE_URL = "https://huggingface.co/spaces/NoobMaster27/DDX"
+
 def call_huggingface_model(image_path):
     try:
-        print("📤 Sending image to Hugging Face Space...")
-
         result = client.predict(
             handle_file(image_path),
-            api_name="/predict"  # CONFIRMED from your Space
+            api_name="/predict"
         )
 
-        print("🧠 HF raw result:", result)
+        # 🔑 CRITICAL FIX: unwrap tuple
+        if isinstance(result, tuple):
+            result = result[0]
 
-        # result is a DICT
-        # {
-        #   "predictions": {...},
-        #   "gradcam_url": "/file/gradcams/xxx.jpg"
-        # }
+        print("🧠 HF RESULT:", result)
 
-        if not isinstance(result, dict):
-            print("❌ Unexpected HF response format")
-            return None
-
-        predictions = result.get("predictions", {})
+        predictions = result.get("predictions")
         gradcam_url = result.get("gradcam_url")
 
         if not predictions:
-            print("❌ No predictions returned")
+            print("❌ Predictions missing")
             return None
 
-        # Sort top 3 predictions
         sorted_preds = sorted(
             predictions.items(),
             key=lambda x: x[1],
@@ -99,11 +94,11 @@ def call_huggingface_model(image_path):
             "top_label": top_label,
             "top_confidence": float(top_confidence),
             "top3": sorted_preds,
-            "gradcam_url": gradcam_url
+            "gradcam_url": HF_BASE_URL + gradcam_url if gradcam_url else None
         }
 
     except Exception as e:
-        print("❌ Hugging Face inference error:", e)
+        print("❌ HF inference error:", e)
         return None
 
 # ------------------ PATIENT UPLOAD ROUTE ------------------
