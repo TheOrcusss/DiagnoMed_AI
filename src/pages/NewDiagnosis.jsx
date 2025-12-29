@@ -195,7 +195,11 @@ export default function NewDiagnosis() {
                         Grad-CAM Heatmap
                       </p>
                       <img
-                        src={`${BACKEND_URL}${selectedCase.gradcam_url}`}
+                        src={
+                          selectedCase.gradcam_url.startsWith("http")
+                            ? selectedCase.gradcam_url
+                            : `${BACKEND_URL}${selectedCase.gradcam_url}`
+                        }
                         alt="GradCAM Heatmap"
                         className="rounded-lg object-contain max-h-[300px] w-full border border-gray-200"
                       />
