@@ -101,11 +101,12 @@ def call_huggingface_model(image_path):
     try:
         predict_url = HF_BASE_URL.rstrip("/") + "/predict"
         with open(image_path, "rb") as f:
+            # Try key 'image' first (existing)
             files = {"image": (os.path.basename(image_path), f, mime)}
-            print(f"📤 Posting to {predict_url} using Pattern B...")
+            print(f"📤 Posting to {predict_url} using Pattern B (image key)...")
             r = requests.post(predict_url, files=files, timeout=60)
             attempts.append((r.status_code, r.text[:1000]))
-            attempts_details.append({"url": predict_url, "pattern": "B", "status": r.status_code, "text": r.text[:5000]})
+            attempts_details.append({"url": predict_url, "pattern": "B-image", "status": r.status_code, "text": r.text[:5000]})
             if r.ok:
                 try:
                     resp = r.json()
@@ -114,6 +115,25 @@ def call_huggingface_model(image_path):
                 parsed = _parse_space_response(resp)
                 if parsed:
                     return parsed
+
+        # Try posting under key 'file' because some FastAPI endpoints expect that
+        try:
+            with open(image_path, "rb") as f2:
+                files = {"file": (os.path.basename(image_path), f2, mime)}
+                print(f"📤 Posting to {predict_url} using Pattern B (file key)...")
+                r = requests.post(predict_url, files=files, timeout=60)
+                attempts.append((r.status_code, r.text[:1000]))
+                attempts_details.append({"url": predict_url, "pattern": "B-file", "status": r.status_code, "text": r.text[:5000]})
+                if r.ok:
+                    try:
+                        resp = r.json()
+                    except Exception:
+                        resp = r.text
+                    parsed = _parse_space_response(resp)
+                    if parsed:
+                        return parsed
+        except Exception as e:
+            print("⚠️ Pattern B (file key) failed:", e)
     except Exception as e:
         print("⚠️ Pattern B failed:", e)
 
@@ -212,8 +232,22 @@ def submit_patient_case():
         prediction = call_huggingface_model(image_path)
         print("🔎 Prediction received:", prediction)
 
+        # If the helper returned the special failure object, surface a concise error
+        if isinstance(prediction, dict) and prediction.get("_error") == "all_attempts_failed":
+            print("❌ Model HTTP attempts failed:", prediction.get("attempts"))
+            return jsonify({"error": "Model inference failed"}), 500
+
         if not prediction:
             return jsonify({"error": "Model inference failed"}), 500
+
+        # Some endpoints wrap the parsed result under a 'prediction' key.
+        if isinstance(prediction, dict) and "prediction" in prediction:
+            prediction = prediction["prediction"]
+
+        # Validate expected keys
+        if not all(k in prediction for k in ("top_label", "top_confidence", "top3")):
+            print("❌ Unexpected prediction shape:", prediction)
+            return jsonify({"error": "Unexpected model response"}), 500
 
         cnn_output = prediction["top_label"]
         confidence = prediction["top_confidence"]
