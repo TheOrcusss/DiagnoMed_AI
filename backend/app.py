@@ -9,7 +9,7 @@ from gradio_client import Client, handle_file
 
 # ------------------ LOAD ENVIRONMENT ------------------
 load_dotenv(override=True)
-print("Database URL:", os.getenv("DATABASE_URL"))
+os.getenv("DATABASE_URL")
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 # ------------------ FLASK CONFIG ------------------
